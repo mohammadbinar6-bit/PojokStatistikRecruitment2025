@@ -1,101 +1,123 @@
-# 🛵 Food Delivery Cost Prediction — End-to-End ML Project
+# 🛵 Apa yang Sebenarnya Membuat Biaya Pengiriman Makanan Naik?
 
-> Menganalisis dan memprediksi biaya pengiriman makanan online menggunakan pendekatan data-driven, dari eksplorasi mendalam hingga deployment model machine learning.
+> Sebuah investigasi data dari 20.000+ transaksi pengiriman makanan online — mencari tahu faktor mana yang benar-benar berpengaruh, mana yang cuma noise, dan kondisi seperti apa yang ideal bagi perusahaan.
 
 **Muhammad Binar Raffi Lazuardi** · Statistika 2023
 
 ---
 
-## 🧠 Pendekatan & Cara Berpikir
+## Pertanyaan yang Ingin Dijawab
 
-Proyek ini bukan sekadar membangun model — saya memulai dari **pertanyaan bisnis yang nyata**: *apa yang sebenarnya membuat biaya pengiriman naik atau turun?* Dari sana, setiap keputusan analisis punya alasan yang jelas.
+Bukan sekadar "bikin model prediksi" — saya mulai dari dua pertanyaan bisnis yang konkret:
 
-Alur berpikir saya:
+1. **Faktor apa yang benar-benar memengaruhi biaya pengiriman?**
+2. **Kondisi seperti apa yang optimal bagi perusahaan?**
 
-```
-Pertanyaan Bisnis → Pahami Data → Bersihkan dengan Bijak → Gali Insight → Bangun Model → Interpretasi
-```
-
----
-
-## 📌 Problem Statement
-
-Industri pengiriman makanan online menghadapi **variasi harga pengiriman yang tidak konsisten** — dipengaruhi jarak, cuaca, hingga lonjakan permintaan. Dua pertanyaan utama yang saya jawab:
-
-1. **Faktor apa saja yang benar-benar memengaruhi biaya pengiriman?**
-2. **Kondisi seperti apa yang paling optimal bagi perusahaan?**
+Dari dua pertanyaan ini, seluruh alur analisis dirancang — bukan sebaliknya.
 
 ---
 
-## 📂 Dataset
+## Dataset
 
-- **Ukuran:** 20.355 baris × 12 kolom
-- **Periode:** 27 November – 13 Desember 2023
+- **20.355 transaksi** · periode 27 Nov – 13 Des 2023
+- 12 variabel: waktu, jarak, cuaca, aktivitas aplikasi, kategori makanan, kenaikan tarif
 - **Target:** `biaya_pengiriman` (Rupiah)
 
-| Kolom | Tipe | Keterangan |
-|---|---|---|
-| `waktu_pemesanan` | datetime | Timestamp pemesanan |
-| `biaya_pengiriman` | float | **Target variabel** |
-| `aktivitas_aplikasi` | int | Jumlah aktivitas user di app |
-| `kategori_makanan` | category | Jenis makanan (nominal) |
-| `jarak_terjauh` | float | Jarak pengiriman terjauh |
-| `jarak_rata2` | float | Rata-rata jarak pengiriman |
-| `jarak_terdekat` | float | Jarak pengiriman terdekat |
-| `hujan` | float | Indikator curah hujan |
-| `kelembapan_udara` | float | Tingkat kelembapan |
-| `suhu_udara` | float | Suhu udara |
-| `kecepatan_angin` | float | Kecepatan angin |
-| `kondisi_awan` | float | Persentase tutupan awan |
+---
+
+## 🔍 Investigasi: Menemukan Cerita di Balik Data
+
+### Ada yang aneh di data waktu
+
+Hal pertama yang saya lakukan adalah memplot biaya pengiriman terhadap waktu. Hasilnya mengejutkan — **ada kekosongan total selama beberapa hari** (5–12 Desember 2023). Tidak ada satu pun transaksi.
+
+Pertanyaannya: kenapa? Libur? Hujan deras? Atau data yang hilang?
+
+```
+Hipotesis 1: Hujan lebat → cek indikator hujan → tidak ada lonjakan
+Hipotesis 2: Cuaca ekstrem → cek kelembapan & awan → tidak ada pola
+Kesimpulan: Bukan fenomena nyata — ini data yang hilang (tidak tercatat)
+```
+
+Dengan investigasi ini, saya tidak serta-merta drop data atau membiarkannya merusak analisis. Gap ditangani dengan **interpolasi linear + rolling mean** agar time series tetap bisa dibaca. Tanpa langkah ini, insight tentang pola waktu bisa menyesatkan.
 
 ---
 
-## 🔍 Analytical Thinking — Highlight Keputusan Penting
+### Cuaca: kelihatannya penting, ternyata tidak sesederhana itu
 
-### 1. EDA Sebelum Cleaning, Bukan Sebaliknya
-Saya memilih melakukan EDA *setelah* cek missing value tapi *sebelum* dropping outlier — karena saya ingin melihat kondisi data asli sebelum distribusinya berubah. Ini penting agar keputusan pembersihan data tidak dilakukan secara membabi buta.
+Intuisi awal: cuaca buruk → biaya naik. Logis.
 
-### 2. Deteksi Anomali Time Series
-Dari visualisasi scatter plot waktu vs. biaya pengiriman, saya menemukan **gap data pada 5–12 Desember 2023**. Alih-alih langsung drop, saya investigasi dulu: apakah karena hujan? libur? atau memang data hilang?
+Tapi setelah saya plot dan hitung korelasi, **tidak ada hubungan linear antara variabel cuaca dengan biaya pengiriman** — baik suhu, kelembapan, kecepatan angin, maupun kondisi awan.
 
-```
-Hipotesis → Cek variabel hujan → Cek kelembapan → Konfirmasi: data hilang, bukan fenomena nyata
-```
+Apakah cuaca tidak berpengaruh sama sekali? Belum tentu.
 
-Gap ini kemudian ditangani dengan **interpolasi linear + rolling mean** agar time series tetap kontinu.
+Saya lanjut dengan clustering berbasis cuaca menggunakan **PCA + K-Means** (karena 5 variabel cuaca terlalu banyak untuk dianalisis satu-satu):
 
-### 3. Transformasi Variabel Berdasarkan Distribusi
-Tidak semua outlier diperlakukan sama:
-
-| Variabel | Masalah | Solusi |
+| Klaster Cuaca | Kondisi | Pola Biaya |
 |---|---|---|
-| `aktivitas_aplikasi` | Right-skewed + outlier | IQR removal → distribusi normal sendiri |
-| `jarak_terdekat` | Right-skewed + outlier | IQR removal + **log transform** |
-| `suhu_udara` | Outlier persisten | IQR removal + **Box-Cox transform** |
-| `kenaikan_tarif_minimum` | Data sangat imbalanced | **Drop kolom** — noise, bukan signal |
+| 0 | Stabil, lembap, awan tebal | Moderat — pengiriman efisien |
+| 1 | Kering, lebih dingin | Konsisten — tidak banyak variasi |
+| 2 | Angin kencang, awan sedikit | Tidak berubah signifikan |
+| 3 | Hujan, angin, suhu ekstrem | Bervariasi — ada yang tinggi, ada yang rendah |
 
-### 4. Cuaca Tidak Linear → Pakai PCA
-Heatmap korelasi menunjukkan **variabel cuaca tidak memiliki hubungan linear** dengan `biaya_pengiriman`. Daripada abaikan, saya gabungkan 5 variabel cuaca menjadi satu komponen `combined_weather` menggunakan **PCA** — mengurangi dimensi tanpa kehilangan informasi penting.
+**Kesimpulan:** Cuaca tidak langsung menentukan biaya, tapi ia membentuk *konteks* operasional. Kondisi cuaca stabil (Klaster 0 & 1) cenderung lebih efisien untuk pengiriman. Temuan ini tetap relevan secara bisnis meski tidak linear secara statistik.
 
-### 5. Segmentasi Pelanggan dengan K-Means
-Scatter plot `aktivitas_aplikasi` vs `biaya_pengiriman` terlihat acak. Saya pakai **Elbow Method** untuk menentukan k optimal (k=3), lalu K-Means untuk menemukan 3 segmen tersembunyi:
+> *Di sinilah saya memutuskan: variabel cuaca tidak di-drop, tapi digabung jadi satu komponen `combined_weather` via PCA — mengurangi noise tanpa kehilangan sinyal.*
 
-| Klaster | Profil | Rekomendasi Bisnis |
+---
+
+### Aktivitas aplikasi: scatter plot yang membingungkan
+
+Hipotesis wajar: semakin banyak orang pakai aplikasi → permintaan tinggi → biaya naik.
+
+Tapi scatter plot-nya acak total. Aktivitas rendah bisa biaya tinggi, aktivitas tinggi bisa biaya rendah.
+
+Ini bukan berarti variabel ini tidak penting — mungkin ada **segmen tersembunyi** di dalamnya. Saya pakai **Elbow Method** untuk tentukan k optimal (k=3), lalu K-Means:
+
+| Klaster | Profil Pengguna | Interpretasi |
 |---|---|---|
-| 0 | Aktivitas rendah, biaya rendah | Berikan promo & diskon |
-| 1 | Aktivitas sedang, biaya tinggi | Buat loyalty membership |
-| 2 | Aktivitas tinggi, biaya sangat tinggi | Exclusive membership premium |
+| 0 | Aktivitas rendah, biaya rendah | Pengguna yang price-sensitive, sering pakai promo |
+| 1 | Aktivitas sedang, biaya tinggi | Pengguna loyal yang tinggal lebih jauh atau pesan di jam sibuk |
+| 2 | Aktivitas tinggi, biaya sangat tinggi | Pengguna premium — high value, tidak sensitif harga |
 
-### 6. Time Series Feature — Fail Fast
-Saya mencoba menambahkan fitur temporal (jam, hari, bulan dengan **cyclic encoding** sin/cos) dan evaluasi dengan **TimeSeriesSplit**. Hasilnya: tidak ada peningkatan performa. Keputusan: drop `waktu_pemesanan`. *Fail fast, move on.*
+Segmentasi ini jauh lebih informatif dari nilai mentahnya — dan langsung bisa diterjemahkan ke strategi bisnis.
+
+---
+
+### Kategori makanan & jarak: konfirmasi dan nuansa
+
+Distribusi kategori makanan hampir merata, tapi ada **4 kategori dengan frekuensi sangat rendah** (9, 19, 29, 39). Kenapa?
+
+Saya cek rata-rata jarak per kategori:
+
+- Kategori frekuensi rendah → **jarak rata-rata lebih jauh**
+- Kategori frekuensi tinggi → **jarak lebih dekat, biaya lebih terjangkau**
+
+Artinya: orang tidak menghindari jenis makanan tertentu karena tidak suka — mereka menghindarinya karena **ongkos kirimnya mahal akibat jarak**. Ini insight yang bisa jadi dasar keputusan ekspansi restoran mitra.
+
+---
+
+### Kenaikan tarif: keberanian untuk drop fitur
+
+Kolom `kenaikan_tarif_minimum` hampir seluruhnya bernilai sama. Secara statistik: **variabilitas nol, tidak ada informasi**.
+
+Keputusan: drop. Model tidak akan belajar apa-apa dari fitur ini — memasukkannya justru menambah noise.
+
+---
+
+### Fitur waktu: diuji, tidak terbukti
+
+Saya mencoba feature engineering dari `waktu_pemesanan`: jam, hari, bulan — dengan **cyclic encoding** (sin/cos) agar model mengenali pola siklus waktu. Dievaluasi dengan **TimeSeriesSplit** agar tidak terjadi data leakage.
+
+Hasilnya: tidak ada peningkatan performa. Drop.
+
+> *Fail fast adalah bagian dari proses yang sehat — lebih baik tahu lebih awal daripada mempertahankan fitur yang tidak berkontribusi.*
 
 ---
 
 ## 🤖 Modelling
 
-**Metrik evaluasi:** RMSE — agar prediksi yang jauh dari nilai aktual lebih "dihukum"
-
-Saya membandingkan 5 model sekaligus dalam satu pipeline:
+Setelah insight terkumpul, saya bandingkan 5 model sekaligus dengan pendekatan yang konsisten:
 
 | Model | RMSE | MAE | R² |
 |---|---|---|---|
@@ -105,56 +127,43 @@ Saya membandingkan 5 model sekaligus dalam satu pipeline:
 | LightGBM | lebih tinggi | lebih tinggi | lebih rendah |
 | **CatBoost ✅** | **792.40** | **573.06** | **0.992** |
 
-**CatBoost** menang di semua metrik. Model mampu menjelaskan **99.2% variabilitas** data target — sangat baik untuk data dengan banyak pola non-linear.
+CatBoost menang di semua metrik — mampu menjelaskan **99.2% variabilitas** data. Hyperparameter tuning dicoba tapi tidak signifikan; base model sudah cukup baik.
 
-> Hyperparameter tuning via RandomizedSearchCV juga dicoba, namun tidak memberikan peningkatan signifikan → base model sudah optimal.
+**Metrik: RMSE** — dipilih agar prediksi yang meleset jauh "dihukum" lebih berat, relevan untuk konteks pricing.
 
 ---
 
-## 🏆 Feature Importance — Apa yang Paling Berpengaruh?
+## 🏆 Apa yang Akhirnya Paling Berpengaruh?
+
+Feature importance dari model mengkonfirmasi banyak temuan di atas:
 
 ```
-1. kategori_makanan                              ████████████████████ paling dominan
+1. kategori_makanan                              ████████████████████
 2. cluster_aktivitas_aplikasi_biaya_pengiriman   ███████████████
 3. cluster_combined_weather_biaya_pengiriman     ████████████
-4. jarak_terdekat                                ██████████
-5. jarak_rata2                                   ████████
+4. jarak_terdekat / jarak_rata2                  ██████████
 ```
 
-**Interpretasi:**
-- `kategori_makanan` dominan karena jenis makanan memengaruhi kebutuhan logistik (pengemasan, berat, handling khusus)
-- Fitur hasil clustering (`cluster_*`) terbukti *lebih informatif* dibanding variabel mentahnya — ini validasi bahwa pendekatan segmentasi tadi tepat
-- Variabel cuaca berkontribusi kecil tapi tetap ada, artinya keputusan untuk tidak membuangnya benar
+Yang menarik: **fitur hasil clustering lebih informatif dari variabel mentahnya**. Ini validasi bahwa pendekatan segmentasi di EDA bukan hanya latihan akademis — ia memang menangkap sinyal yang tidak terlihat di raw data.
 
 ---
 
-## 💡 Business Insight
+## 💡 Rekomendasi untuk Perusahaan
 
-Kondisi ideal untuk perusahaan memaksimalkan efisiensi & pendapatan:
-
-- **Fokus pada segmen Klaster 2** (high activity, high spend) — kontributor pendapatan terbesar
-- **Kelompokkan menu berdasarkan kebutuhan logistik**, bukan sekadar kategori kuliner
-- **Prioritaskan pengiriman saat cuaca stabil** (Klaster cuaca 0 & 1); siapkan mitigasi saat ekstrem
-- **Optimalkan jarak terdekat** — kategori makanan populer cenderung dekat, ini keuntungan kompetitif yang bisa diperkuat
+| Area | Rekomendasi |
+|---|---|
+| **Pelanggan** | Segmentasi berbasis klaster aktivitas — promo untuk Klaster 0, loyalty program untuk Klaster 1, exclusive membership untuk Klaster 2 |
+| **Operasional** | Prioritaskan pengiriman saat cuaca stabil (Klaster 0 & 1); siapkan protokol khusus saat ekstrem |
+| **Ekspansi** | Tambah mitra restoran di kategori makanan dengan jarak jauh — potensi demand ada, tapi terhalang ongkir |
+| **Logistik** | Kelompokkan kategori makanan berdasarkan kebutuhan penanganan, bukan hanya jenis kuliner |
 
 ---
 
 ## 🛠️ Tech Stack
 
 ```python
-pandas · numpy · scikit-learn · seaborn · matplotlib
-xgboost · lightgbm · catboost · scipy · joblib
-```
-
----
-
-## 📁 Struktur Project
-
-```
-📁 project/
-├── POJOKSTATISTIK_Binar.ipynb   # Main notebook
-├── best_model.pkl               # Saved CatBoost model
-└── README.md
+pandas · numpy · scikit-learn · seaborn · matplotlib · scipy
+xgboost · lightgbm · catboost · joblib
 ```
 
 ---
@@ -165,4 +174,4 @@ xgboost · lightgbm · catboost · scipy · joblib
 pip install catboost lightgbm xgboost scikit-learn pandas numpy seaborn matplotlib scipy
 ```
 
-Jalankan `POJOKSTATISTIK_Binar.ipynb` dari atas ke bawah. Dataset otomatis diunduh dari Google Drive saat cell *Loading Data* dieksekusi.
+Jalankan `POJOKSTATISTIK_Binar.ipynb` dari atas ke bawah. Dataset otomatis diunduh saat cell *Loading Data* dieksekusi.
